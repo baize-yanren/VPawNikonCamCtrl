@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 应用主题：使用系统 Material 无 ActionBar 主题作为宿主。 -->
+    <style name="Theme.NikonConnector" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

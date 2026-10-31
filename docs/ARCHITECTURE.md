@@ -19,6 +19,14 @@
 
 CamCore 不含任何平台 API，只暴露 C 头文件 `include/camcore.h`（不透明句柄 + 枚举 + 异步回调）。两端通过实现 `cc_transport_ops_t`（connect/disconnect/send/recv/set_timeout）注入底层传输。
 
+### PTP/IP 无线如何接入（关键抽象）
+
+PTP/IP 与 USB-PTP 的差异（8 字节帧头、Init 握手、OperationRequest/Response 私有载荷、StartData/Data/EndData 数据传输）被封装在 **`src/ptpip/` 的 transport 适配器** 里，核心 `cc_transact` / `cc_connect` **完全不变**：
+
+- 平台层只需提供**两条「已连接」的字节流 transport**（命令连接 + 事件连接，即 TCP socket 的薄封装），交给 `cc_ptpip_transport_new()`。
+- 适配器向上仍暴露「裸 PTP 容器字节流」：`connect()` 做 Init 握手（350ms quirk），`send()` 把容器编码为帧，`recv()` 把帧解码回容器字节。
+- 这样 USB 与 WiFi 两套传输对核心透明，同一套 PTP 语义代码（枚举/下载/快门/取景）双通道复用。
+
 ## 2. 目录结构
 
 ```
@@ -35,10 +43,16 @@ core/
 │   │   ├── bytebuf.c        # 小端序字节缓冲
 │   │   ├── container.c      # 12 字节容器编解码
 │   │   └── dataset.c        # 字符串/数组/UTF-16LE 解析
+│   ├── ptpip/               # PTP/IP 无线协议层
+│   │   ├── ptpip.h/.c       # 帧编解码（8 字节帧头、Init 握手、Operation/Data 帧）
+│   │   └── ptpip_transport.c# transport 适配器（握手 + 容器<->帧翻译）
 │   └── profile/             # 机型档案表（PID/EXPEED/ISO 范围）
 ├── tests/
-│   ├── mock_camera.c        # 内存 mock 相机（复用 FakeNikonServer 思路）
-│   └── test_main.c          # 回归测试
+│   ├── mock_ptp_core.c      # 共享 mock PTP 操作核心（USB/PTPIP 复用）
+│   ├── mock_camera.c        # USB mock 相机
+│   ├── mock_ptpip_camera.c  # PTP/IP mock 服务端（握手 + 帧编解码）
+│   ├── test_main.c          # USB 回归测试
+│   └── test_ptpip.c         # PTP/IP 回归测试
 └── CMakeLists.txt
 ```
 
@@ -60,8 +74,9 @@ core/
 | 图库枚举 + 分块下载 + 续传 | ✅ 已实现 |
 | 遥控快门 / B门 / 参数读写 | ✅ 已实现（需真机验证 quirk） |
 | 实时取景（JPEG 帧） | ✅ 已实现 |
-| PTP/IP（WiFi）帧封装 + 350ms 握手 | ⏳ 待实现（src/ptpip/） |
+| PTP/IP（WiFi）帧封装 + 350ms 握手 | ✅ 已实现 + mock 回归（`src/ptpip/`） |
 | USB / BLE Transport 平台适配层 | ⏳ 待实现（Android JNI / HarmonyOS NAPI） |
+| PTP/IP 事件通道（异步 Event 帧） | ⏳ 已握手，事件帧处理待实现（当前走 CheckEvent 轮询） |
 
 ## 6. 构建与测试
 

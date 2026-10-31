@@ -1,5 +1,6 @@
 package com.nikoncam.connector
 
+import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
@@ -71,9 +72,11 @@ class UsbTransport(
                 }
             }
             if (epIn == null || epOut == null) return null
+            val inEp = epIn
+            val outEp = epOut
 
             val conn = usbManager.openDevice(device) ?: return null
-            return UsbTransport(device, conn, itf, epIn!!, epOut!!)
+            return UsbTransport(device, conn, itf, inEp, outEp)
         }
     }
 }

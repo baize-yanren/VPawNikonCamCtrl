@@ -76,10 +76,14 @@ static const cc_transport_ops_t k_ops = {
 static void on_cam_event(void *userdata, const cc_event_t *ev) {
     (void)userdata;
     if (!ev || !g_listener_ref) return;
-    napi_value arg, r;
-    napi_create_int32(g_env, (int32_t)ev->type, &arg);
-    r = call_arkts(g_listener_ref, "onNativeEvent", arg);
-    (void)r;
+    napi_value argv[3];
+    napi_create_int32(g_env, (int32_t)ev->type, &argv[0]);
+    napi_create_uint32(g_env, ev->arg0, &argv[1]);
+    napi_create_uint32(g_env, ev->arg1, &argv[2]);
+    napi_value obj, fn, result;
+    napi_get_reference_value(g_env, g_listener_ref, &obj);
+    napi_get_named_property(g_env, obj, "onNativeEvent", &fn);
+    napi_call_function(g_env, obj, fn, 3, argv, &result);
 }
 
 /* ------------------------------------------------------------------ */

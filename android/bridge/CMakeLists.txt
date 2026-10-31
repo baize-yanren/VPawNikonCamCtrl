@@ -14,6 +14,8 @@ add_library(camcore_static STATIC
     ${CAMCORE_ROOT}/src/ptp/bytebuf.c
     ${CAMCORE_ROOT}/src/ptp/container.c
     ${CAMCORE_ROOT}/src/ptp/dataset.c
+    ${CAMCORE_ROOT}/src/ptpip/ptpip.c
+    ${CAMCORE_ROOT}/src/ptpip/ptpip_transport.c
     ${CAMCORE_ROOT}/src/profile/camera_profile.c
 )
 target_include_directories(camcore_static PUBLIC ${CAMCORE_ROOT}/include)
@@ -25,4 +27,6 @@ target_link_libraries(camcore camcore_static)
 target_include_directories(camcore PRIVATE
     ${CAMCORE_ROOT}/include
     ${CAMCORE_ROOT}/src
+    ${CAMCORE_ROOT}/src/ptp
+    ${CAMCORE_ROOT}/src/ptpip
 )

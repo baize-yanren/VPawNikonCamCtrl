@@ -64,6 +64,24 @@ class CameraController : NativeEventListener {
         return true
     }
 
+    /** 以 WiFi（PTP/IP）连接相机；host 为相机 IP，端口默认 15740。 */
+    fun connectWifi(host: String): Boolean {
+        val t = PtpIpTransport(host)
+        val created = CamCoreJni.nativeCreatePtpIp(t, this)
+        if (created != CamCoreJni.CC_OK) {
+            _state.value = State.Error(created)
+            return false
+        }
+        _state.value = State.Connecting
+        val rc = CamCoreJni.nativeConnect()
+        if (rc != CamCoreJni.CC_OK) {
+            _state.value = State.Error(rc)
+            return false
+        }
+        _state.value = State.Connected
+        return true
+    }
+
     fun disconnect() {
         CamCoreJni.nativeDisconnect()
         _state.value = State.Idle
@@ -82,7 +100,7 @@ class CameraController : NativeEventListener {
     fun endLiveView(): Boolean = CamCoreJni.nativeEndLiveView() == CamCoreJni.CC_OK
 
     fun listObjects(): List<ObjectInfo> =
-        CamCoreJni.nativeListObjects().toList()
+        CamCoreJni.nativeListObjects()?.toList() ?: emptyList()
 
     fun download(handle: Int, path: String): Boolean =
         CamCoreJni.nativeDownload(handle, path) == CamCoreJni.CC_OK

@@ -33,6 +33,8 @@ object CamCoreJni {
 
     external fun nativeSetTransport(transport: NativeTransport, listener: NativeEventListener)
     external fun nativeCreate(kind: Int): Int
+    /** 以 PTP/IP（WiFi）方式创建会话：包装 TCP 命令字节流，握手与帧编解码在 native 完成。 */
+    external fun nativeCreatePtpIp(transport: NativeTransport, listener: NativeEventListener): Int
     external fun nativeConnect(): Int
     external fun nativeDisconnect(): Int
     external fun nativeCapture(): Int
@@ -40,7 +42,7 @@ object CamCoreJni {
     external fun nativeGetLiveViewFrame(out: ByteArray): Int
     external fun nativeEndLiveView(): Int
     external fun nativeDownload(handle: Int, path: String): Int
-    external fun nativeListObjects(): Array<ObjectInfo>
+    external fun nativeListObjects(): Array<ObjectInfo>?
     external fun nativeGetParam(prop: Int): Int
     external fun nativeSetParam(prop: Int, value: Int): Int
     external fun nativeDestroy()

@@ -20,8 +20,8 @@
          │ USB PTP   │ PTP/IP  │ BLE  │  —— 尼康机身
 ```
 
-- **`core/`**：共享协议核心（C99，稳定 C ABI），不含平台 API。已实现 USB-PTP 容器/事务/会话/事件、图库枚举、4 MiB 分块 + 断点续传下载、遥控快门/B门、参数读写、实时取景。主机侧可用 mock 相机回归测试。
-- **`android/`**：JNI 桥 + Kotlin/Compose UI（USB Host）。
+- **`core/`**：共享协议核心（C99，稳定 C ABI），不含平台 API。已实现 USB-PTP 容器/事务/会话/事件、图库枚举、4 MiB 分块 + 断点续传下载、遥控快门/B门、参数读写、实时取景，以及 PTP/IP（WiFi）帧编解码 + 握手适配（`src/ptpip/`）。主机侧可用 mock 相机回归测试（USB + PTP/IP 两组）。
+- **`android/`**：JNI 桥 + Kotlin/Compose UI，支持 **USB（USB-PTP）** 与 **WiFi（PTP/IP，端口 15740）** 两种连接。
 - **`harmony/`**：NAPI 桥 + ArkTS（`@ohos.usbManager`）。
 
 ## 快速开始
@@ -36,7 +36,18 @@ bash scripts/build-core.sh   # 编译 CamCore 并运行 mock 回归测试
 
 ### Android
 
-用 Android Studio 打开 `android/`（NDK + CMake 已配置），连接 USB 相机运行。参见 `android/bridge/camcore_jni.c` 与 `android/app/`。
+用 Android Studio 打开 `android/`（NDK + CMake 已配置），或命令行构建：
+
+```bash
+# 前置：JDK 17 + Android SDK（platform-tools/platforms;android-35/build-tools;35.0.0/ndk;26.1.10909125/cmake;3.22.1）
+cd android
+./gradlew assembleDebug        # 或 gradlew.bat（Windows）
+# 产物：app/build/outputs/apk/debug/app-debug.apk
+```
+
+- **USB**：`android/app/.../UsbTransport.kt`（USB-PTP，VID 0x04B0）。
+- **WiFi**：`android/app/.../PtpIpTransport.kt`（TCP 字节流）+ native `cc_ptpip_transport`（握手/帧编解码复用 C 实现）。
+- 真机需相机处于 USB PTP / WiFi PTP/IP 模式，USB 首次接入需授权。
 
 ### HarmonyOS
 

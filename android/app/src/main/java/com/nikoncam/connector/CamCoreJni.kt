@@ -20,12 +20,15 @@ object CamCoreJni {
 
     /* 状态码（与 camcore.h cc_status_t 对应） */
     const val CC_OK = 0
+    const val CC_ERR_INVALID_ARG = -1
     const val CC_ERR_NOT_CONNECTED = -2
     const val CC_ERR_TIMEOUT = -3
     const val CC_ERR_PROTOCOL = -4
     const val CC_ERR_DEVICE_BUSY = -5
     const val CC_ERR_UNSUPPORTED = -6
     const val CC_ERR_IO = -7
+    const val CC_ERR_SESSION = -8
+    const val CC_ERR_NO_MEMORY = -9
 
     /* 传输类型 */
     const val TRANSPORT_USB = 1

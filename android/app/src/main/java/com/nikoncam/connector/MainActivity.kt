@@ -5,53 +5,46 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.BitmapFactory
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
 
 /** USB 授权结果广播 action（UsbManager 未暴露该常量，用规范字符串）。 */
 private const val ACTION_USB_PERMISSION = "android.hardware.usb.action.USB_PERMISSION"
 
 /**
- * 相机连接器主界面（Compose）：
- * USB/WiFi 设备连接 → 实时取景 + 快门 + 参数 + 图库浏览与下载。
- * 阻塞的 PTP 调用统一放到 Dispatchers.IO，避免主线程 ANR。
+ * 相机连接器主界面：悬浮胶囊 Dock（连接/遥控/图库/设置）+ 内容区限宽 480dp。
+ * 视觉范式对齐 VPawCamCtrl：单一主题色驱动、16 圆角卡片、胶囊按钮、Dock 独占投影。
  */
 class MainActivity : ComponentActivity() {
 
@@ -60,35 +53,44 @@ class MainActivity : ComponentActivity() {
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent == null) return
-            when (intent.action) {
-                UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                    findNikonDevice()?.let { requestPermission(it) }
-                }
-                ACTION_USB_PERMISSION -> {
-                    val device = intent.getParcelableExtraCompat<UsbDevice>(UsbManager.EXTRA_DEVICE)
-                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                    if (granted && device != null) {
-                        Thread { controller.connectUsb(usbManager, device) }.start()
-                    }
-                }
+            if (intent?.action != ACTION_USB_PERMISSION) return
+            val device = intent.getParcelableExtraCompat<UsbDevice>(UsbManager.EXTRA_DEVICE)
+            val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+            if (granted && device != null) {
+                Thread { controller.connectUsb(usbManager, device) }.start()
             }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val filter = IntentFilter().apply {
-            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
-            addAction(ACTION_USB_PERMISSION)
+        enableEdgeToEdge()
+
+        // Android 14+ 动态注册自定义广播必须显式指定 exported flag，否则抛 SecurityException 闪退。
+        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(usbReceiver, filter)
         }
-        registerReceiver(usbReceiver, filter)
+
         setContent {
-            MaterialTheme {
-                AppScreen(controller, usbManager, ::requestPermission)
+            val theme = remember { AppThemeState() }
+            NikonTheme(theme) {
+                AppRoot(controller, usbManager, ::requestPermission)
             }
         }
         findNikonDevice()?.let { requestPermission(it) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            val device = intent.getParcelableExtraCompat<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                ?: findNikonDevice()
+            device?.let { requestPermission(it) }
+        }
     }
 
     override fun onDestroy() {
@@ -119,143 +121,71 @@ class MainActivity : ComponentActivity() {
 private inline fun <reified T> Intent.getParcelableExtraCompat(name: String): T? =
     getParcelableExtra(name) as? T
 
+/** 应用根：内容区（限宽 480dp）+ 悬浮胶囊 Dock。 */
 @Composable
-fun AppScreen(
+fun AppRoot(
     controller: CameraController,
     usbManager: UsbManager,
     requestPermission: (UsbDevice) -> Unit,
 ) {
-    val state by controller.state.collectAsState()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val colors = LocalNikonColors.current
+    var currentTab by remember { mutableStateOf(0) }
 
-    var frames by remember { mutableStateOf<List<ObjectInfo>>(emptyList()) }
-    var liveBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    var wifiHost by remember { mutableStateOf("192.168.1.1") }
-    var liveJob by remember { mutableStateOf<Job?>(null) }
-
-    fun refreshGallery() {
-        scope.launch(Dispatchers.IO) {
-            frames = controller.listObjects()
-        }
-    }
-
-    fun captureOnce() {
-        scope.launch(Dispatchers.IO) { controller.capture() }
-    }
-
-    fun toggleLiveView() {
-        val job = liveJob
-        if (job != null && job.isActive) {
-            job.cancel()
-            liveJob = null
-            scope.launch(Dispatchers.IO) { controller.endLiveView() }
-            return
-        }
-        liveJob = scope.launch(Dispatchers.IO) {
-            if (!controller.startLiveView()) return@launch
-            val buf = ByteArray(2 * 1024 * 1024)
-            while (isActive) {
-                val n = controller.getLiveViewFrame(buf)
-                if (n > 0) {
-                    val bmp = BitmapFactory.decodeByteArray(buf, 0, n)?.asImageBitmap()
-                    if (bmp != null) liveBitmap = bmp
-                }
-                delay(100)
-            }
-            controller.endLiveView()
-        }
-    }
-
-    fun connectWifi() {
-        scope.launch(Dispatchers.IO) { controller.connectWifi(wifiHost.trim()) }
-    }
-
-    fun connectUsb() {
-        val device = usbManager.deviceList.values.firstOrNull { it.vendorId == UsbTransport.NIKON_VID }
-        if (device != null) requestPermission(device)
-    }
-
-    Scaffold { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
+    Box(Modifier.fillMaxSize().background(colors.bgPage)) {
+        Box(
+            Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .statusBarsPadding()
+                .widthIn(max = 480.dp)
+                .align(Alignment.TopCenter)
         ) {
-            Text(
-                text = when (val s = state) {
-                    is CameraController.State.Connected -> "已连接"
-                    is CameraController.State.Connecting -> "连接中…"
-                    is CameraController.State.Error -> "连接失败 (code=${s.code})"
-                    else -> "未连接（请接入尼康相机或输入相机 IP）"
-                },
-                style = MaterialTheme.typography.titleMedium,
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(onClick = { connectUsb() }, enabled = state !is CameraController.State.Connected) {
-                    Text("USB 连接")
-                }
+            when (currentTab) {
+                0 -> ConnectScreen(controller, usbManager, requestPermission)
+                1 -> RemoteScreen(controller, onGoConnect = { currentTab = 0 })
+                2 -> GalleryScreen(controller, onGoConnect = { currentTab = 0 })
+                3 -> SettingsScreen()
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        }
+        DockBar(currentTab, onSelect = { currentTab = it }, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** 悬浮胶囊 Dock：底部横向，4 个 Tab 均分。 */
+@Composable
+fun DockBar(current: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalNikonColors.current
+    val tabs = listOf(
+        "🔧" to "连接",
+        "📷" to "遥控",
+        "🖼️" to "图库",
+        "⚙️" to "设置",
+    )
+    Row(
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .fillMaxWidth()
+            .widthIn(max = 480.dp)
+            .height(64.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(colors.dockBg)
+            .shadow(20.dp, RoundedCornerShape(32.dp)),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tabs.forEachIndexed { i, (icon, label) ->
+            val selected = current == i
+            val tint = if (selected) colors.themeColor else colors.textFaint
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onSelect(i) }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
             ) {
-                OutlinedTextField(
-                    value = wifiHost,
-                    onValueChange = { wifiHost = it },
-                    label = { Text("相机 IP") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                Button(
-                    onClick = { connectWifi() },
-                    enabled = state !is CameraController.State.Connected,
-                ) { Text("WiFi 连接") }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            if (state is CameraController.State.Connected) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    liveBitmap?.let { Image(it, contentDescription = "实时取景") }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { toggleLiveView() }) {
-                        Text(if (liveJob?.isActive == true) "停止取景" else "实时取景")
-                    }
-                    Button(onClick = { captureOnce() }) { Text("快门") }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Button(onClick = { refreshGallery() }) { Text("刷新图库") }
-
-                frames.take(50).forEach { obj ->
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(obj.filename, modifier = Modifier.weight(1f))
-                        Text("${obj.size / 1024} KB")
-                        Button(onClick = {
-                            val path = context.filesDir.absolutePath + "/" + obj.filename
-                            scope.launch(Dispatchers.IO) { controller.download(obj.handle, path) }
-                        }) { Text("下载") }
-                    }
-                }
+                Text(icon, fontSize = 22.sp, color = tint)
+                Text(label, fontSize = 11.sp, color = tint)
             }
         }
     }

@@ -294,6 +294,8 @@ Java_com_nikoncam_connector_CamCoreJni_nativeGetLiveViewFrame(JNIEnv *env, jobje
     cc_status_t st = cc_get_live_view_frame(g_session, buf, &len);
     if (st == CC_OK) {
         (*env)->SetByteArrayRegion(env, out, 0, (jsize)len, (const jbyte *)buf);
+        free(buf);
+        return (jint)len; /* 成功返回帧字节数，供 Kotlin 侧 decodeByteArray(buf, 0, n) 使用 */
     }
     free(buf);
     return (jint)st;

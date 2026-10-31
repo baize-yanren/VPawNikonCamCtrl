@@ -1,0 +1,48 @@
+# 构建产物
+core/build/
+*.exe
+*.o
+*.a
+*.so
+*.apk
+*.aab
+*.hap
+
+# 参考源码（只读参考，不并入 MIT 仓库）
+reference/
+
+# WorkBuddy 本地项目数据（不提交到代码仓库）
+.workbuddy/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# HarmonyOS / DevEco
+harmony/oh_modules/
+harmony/build/
+harmony/.hvigor/
+harmony/**/build/
+harmony/local.properties
+
+# 签名密钥（绝不入库）
+*.jks
+*.keystore
+*.p12
+*.pem
+*.cer
+signingConfigs/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 测试产物
+*.part
+test_download.out

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 尼康 USB 设备过滤（VID 0x04B0 = 1200，Still Image class） -->
+<resources>
+    <usb-device vendor-id="1200" />
+    <usb-device class="6" subclass="1" protocol="1" />
+</resources>

@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # CamCore 主机侧单测（mock 相机，无需真机/NDK）
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & test CamCore
+        run: |
+          gcc -std=c99 -Wall -Wextra \
+            -Icore/include -Icore/src -Icore/src/ptp -Icore/src/profile -Icore/tests \
+            core/src/session.c \
+            core/src/capture.c \
+            core/src/gallery.c \
+            core/src/params.c \
+            core/src/ptp/bytebuf.c \
+            core/src/ptp/container.c \
+            core/src/ptp/dataset.c \
+            core/src/profile/camera_profile.c \
+            core/tests/test_main.c \
+            core/tests/mock_camera.c \
+            -o camcore_tests
+          ./camcore_tests
+
+  # Android NDK 构建（需 Android SDK 的 CI runner；启用前需配置 SDK）
+  android:
+    runs-on: ubuntu-latest
+    if: false   # 骨架阶段默认关闭，配置好 Android SDK 后移除本行
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug
